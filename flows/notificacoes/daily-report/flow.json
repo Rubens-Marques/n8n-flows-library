@@ -1,0 +1,114 @@
+{
+  "name": "Relatório Diário Automático",
+  "nodes": [
+    {
+      "id": "f6a7b8c9-0006-0006-0006-000000000001",
+      "name": "Todo dia às 8h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f6a7b8c9-0006-0006-0006-000000000002",
+      "name": "Buscar Métricas do Dia",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  COUNT(*) as total_pedidos,\n  SUM(CASE WHEN status = 'concluido' THEN 1 ELSE 0 END) as pedidos_concluidos,\n  SUM(CASE WHEN status = 'cancelado' THEN 1 ELSE 0 END) as pedidos_cancelados,\n  SUM(CASE WHEN status = 'pendente' THEN 1 ELSE 0 END) as pedidos_pendentes,\n  COALESCE(SUM(valor_total), 0) as receita_total,\n  COUNT(DISTINCT cliente_id) as clientes_ativos\nFROM pedidos\nWHERE DATE(criado_em) = DATE(NOW() - INTERVAL 1 DAY);",
+        "options": {}
+      },
+      "credentials": {
+        "mySql": {
+          "id": "cred-mysql",
+          "name": "MySQL Database"
+        }
+      }
+    },
+    {
+      "id": "f6a7b8c9-0006-0006-0006-000000000003",
+      "name": "Formatar Relatório HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "jsCode": "const dados = $input.first().json;\nconst ontem = new Date();\nontem.setDate(ontem.getDate() - 1);\nconst dataFormatada = ontem.toLocaleDateString('pt-BR');\n\nconst taxaConclusao = dados.total_pedidos > 0\n  ? ((dados.pedidos_concluidos / dados.total_pedidos) * 100).toFixed(1)\n  : 0;\n\nconst receitaFormatada = new Intl.NumberFormat('pt-BR', {\n  style: 'currency',\n  currency: 'BRL'\n}).format(dados.receita_total || 0);\n\nconst html = `\n<h2>Relatório Diário — ${dataFormatada}</h2>\n<table border=\"1\" cellpadding=\"8\" style=\"border-collapse:collapse;\">\n  <tr><th>Métrica</th><th>Valor</th></tr>\n  <tr><td>Total de Pedidos</td><td><strong>${dados.total_pedidos}</strong></td></tr>\n  <tr><td>Concluídos</td><td style=\"color:green\">${dados.pedidos_concluidos}</td></tr>\n  <tr><td>Cancelados</td><td style=\"color:red\">${dados.pedidos_cancelados}</td></tr>\n  <tr><td>Pendentes</td><td style=\"color:orange\">${dados.pedidos_pendentes}</td></tr>\n  <tr><td>Taxa de Conclusão</td><td>${taxaConclusao}%</td></tr>\n  <tr><td>Receita Total</td><td><strong>${receitaFormatada}</strong></td></tr>\n  <tr><td>Clientes Ativos</td><td>${dados.clientes_ativos}</td></tr>\n</table>\n`;\n\nreturn [{ json: { ...dados, html_relatorio: html, data_referencia: dataFormatada } }];"
+      }
+    },
+    {
+      "id": "f6a7b8c9-0006-0006-0006-000000000004",
+      "name": "Enviar Relatório por Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [900, 300],
+      "parameters": {
+        "fromEmail": "relatorios@seudominio.com",
+        "toEmail": "gestao@seudominio.com",
+        "subject": "Relatório Diário — {{ $json.data_referencia }}",
+        "emailFormat": "html",
+        "message": "={{ $json.html_relatorio }}",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "cred-smtp",
+          "name": "SMTP Email"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Todo dia às 8h": {
+      "main": [
+        [
+          {
+            "node": "Buscar Métricas do Dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Métricas do Dia": {
+      "main": [
+        [
+          {
+            "node": "Formatar Relatório HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatar Relatório HTML": {
+      "main": [
+        [
+          {
+            "node": "Enviar Relatório por Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "f6a7b8c9-0006-0006-0006-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

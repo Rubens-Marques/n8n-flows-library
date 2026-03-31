@@ -1,0 +1,139 @@
+{
+  "name": "Processador de CSV",
+  "nodes": [
+    {
+      "id": "d4e5f6a7-0004-0004-0004-000000000001",
+      "name": "Webhook Upload CSV",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upload-csv",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryData": true
+        }
+      }
+    },
+    {
+      "id": "d4e5f6a7-0004-0004-0004-000000000002",
+      "name": "Ler Arquivo CSV",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "operation": "fromFile",
+        "binaryPropertyName": "data",
+        "options": {
+          "headerRow": true,
+          "delimiter": ";",
+          "encoding": "utf8"
+        }
+      }
+    },
+    {
+      "id": "d4e5f6a7-0004-0004-0004-000000000003",
+      "name": "Validar e Transformar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst validos = [];\nconst erros = [];\n\nfor (const item of items) {\n  const row = item.json;\n  \n  // Validações obrigatórias\n  if (!row.nome || !row.email) {\n    erros.push({ linha: row, erro: 'Nome e email são obrigatórios' });\n    continue;\n  }\n  \n  // Validar formato email\n  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  if (!emailRegex.test(row.email)) {\n    erros.push({ linha: row, erro: 'Email inválido' });\n    continue;\n  }\n  \n  // Normalizar dados\n  validos.push({\n    json: {\n      nome: String(row.nome).trim(),\n      email: String(row.email).trim().toLowerCase(),\n      telefone: row.telefone ? String(row.telefone).replace(/\\D/g, '') : null,\n      valor: row.valor ? parseFloat(String(row.valor).replace(',', '.')) : 0,\n      status: 'ativo',\n      processado_em: new Date().toISOString()\n    }\n  });\n}\n\nconsole.log(`Válidos: ${validos.length} | Erros: ${erros.length}`);\nreturn validos;"
+      }
+    },
+    {
+      "id": "d4e5f6a7-0004-0004-0004-000000000004",
+      "name": "Preparar Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [900, 300],
+      "parameters": {
+        "mode": "passthrough",
+        "includeOtherFields": true,
+        "fields": {
+          "values": []
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d4e5f6a7-0004-0004-0004-000000000005",
+      "name": "Enviar para Destino",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.destino.com/v1/registros/bulk",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-destino-api",
+          "name": "API Destino Auth"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Upload CSV": {
+      "main": [
+        [
+          {
+            "node": "Ler Arquivo CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ler Arquivo CSV": {
+      "main": [
+        [
+          {
+            "node": "Validar e Transformar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar e Transformar": {
+      "main": [
+        [
+          {
+            "node": "Preparar Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Payload": {
+      "main": [
+        [
+          {
+            "node": "Enviar para Destino",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "d4e5f6a7-0004-0004-0004-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

@@ -1,0 +1,164 @@
+{
+  "name": "Monitor de Erros com Alertas",
+  "nodes": [
+    {
+      "id": "e5f6a7b8-0005-0005-0005-000000000001",
+      "name": "Verificar a Cada 5 Minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e5f6a7b8-0005-0005-0005-000000000002",
+      "name": "Health Check Endpoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://suaaplicacao.com/health",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          },
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "e5f6a7b8-0005-0005-0005-000000000003",
+      "name": "Checar Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-status",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e5f6a7b8-0005-0005-0005-000000000004",
+      "name": "Alerta por Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [900, 180],
+      "parameters": {
+        "fromEmail": "alertas@seudominio.com",
+        "toEmail": "devops@seudominio.com",
+        "subject": "ALERTA: Serviço fora do ar — Código {{ $json.statusCode }}",
+        "emailFormat": "html",
+        "message": "<h2>Alerta de Indisponibilidade</h2><p><strong>Serviço:</strong> https://suaaplicacao.com</p><p><strong>Status HTTP:</strong> {{ $json.statusCode }}</p><p><strong>Data/Hora:</strong> {{ new Date().toLocaleString('pt-BR') }}</p><p>Verifique o servidor imediatamente.</p>",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "cred-smtp",
+          "name": "SMTP Email"
+        }
+      }
+    },
+    {
+      "id": "e5f6a7b8-0005-0005-0005-000000000005",
+      "name": "Alerta WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 420],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp-provider.com/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: '5511999999999', message: `ALERTA: Serviço fora do ar!\\nStatus: ${$json.statusCode}\\nHorário: ${new Date().toLocaleString('pt-BR')}` }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-whatsapp",
+          "name": "WhatsApp API Auth"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Verificar a Cada 5 Minutos": {
+      "main": [
+        [
+          {
+            "node": "Health Check Endpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Check Endpoint": {
+      "main": [
+        [
+          {
+            "node": "Checar Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checar Status": {
+      "main": [
+        [
+          {
+            "node": "Alerta por Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Alerta WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "e5f6a7b8-0005-0005-0005-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

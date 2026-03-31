@@ -1,0 +1,150 @@
+{
+  "name": "API para Banco de Dados",
+  "nodes": [
+    {
+      "id": "c3d4e5f6-0003-0003-0003-000000000001",
+      "name": "Agendamento Diário",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c3d4e5f6-0003-0003-0003-000000000002",
+      "name": "Buscar Dados da API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.exemplo.com/v1/registros",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "date",
+              "value": "={{ $today.format('YYYY-MM-DD') }}"
+            },
+            {
+              "name": "limit",
+              "value": "500"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-api-externa",
+          "name": "API Externa Auth"
+        }
+      }
+    },
+    {
+      "id": "c3d4e5f6-0003-0003-0003-000000000003",
+      "name": "Transformar Registros",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "jsCode": "const registros = $input.first().json.data || [];\n\nreturn registros.map(item => ({\n  json: {\n    id_externo: item.id,\n    nome: item.name || item.nome,\n    valor: parseFloat(item.value || item.valor || 0),\n    status: (item.status || 'pendente').toLowerCase(),\n    categoria: item.category || item.categoria || 'sem_categoria',\n    data_registro: item.created_at || new Date().toISOString(),\n    importado_em: new Date().toISOString()\n  }\n}));"
+      }
+    },
+    {
+      "id": "c3d4e5f6-0003-0003-0003-000000000004",
+      "name": "Inserir no MySQL",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [900, 300],
+      "parameters": {
+        "operation": "insert",
+        "table": {
+          "__rl": true,
+          "value": "registros_importados",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id_externo": "={{ $json.id_externo }}",
+            "nome": "={{ $json.nome }}",
+            "valor": "={{ $json.valor }}",
+            "status": "={{ $json.status }}",
+            "categoria": "={{ $json.categoria }}",
+            "data_registro": "={{ $json.data_registro }}",
+            "importado_em": "={{ $json.importado_em }}"
+          }
+        },
+        "options": {
+          "replaceEmptyStrings": true
+        }
+      },
+      "credentials": {
+        "mySql": {
+          "id": "cred-mysql",
+          "name": "MySQL Database"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Agendamento Diário": {
+      "main": [
+        [
+          {
+            "node": "Buscar Dados da API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Dados da API": {
+      "main": [
+        [
+          {
+            "node": "Transformar Registros",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transformar Registros": {
+      "main": [
+        [
+          {
+            "node": "Inserir no MySQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "c3d4e5f6-0003-0003-0003-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

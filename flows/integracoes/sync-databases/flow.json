@@ -1,0 +1,146 @@
+{
+  "name": "Sincronização entre Bancos de Dados",
+  "nodes": [
+    {
+      "id": "b8c9d0e1-0008-0008-0008-000000000001",
+      "name": "Sincronizar a Cada Hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b8c9d0e1-0008-0008-0008-000000000002",
+      "name": "Buscar Registros Novos",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  id,\n  nome,\n  email,\n  telefone,\n  status,\n  categoria,\n  valor,\n  atualizado_em\nFROM clientes\nWHERE atualizado_em > DATE_SUB(NOW(), INTERVAL 1 HOUR)\n  AND sincronizado = 0\nORDER BY atualizado_em ASC\nLIMIT 500;",
+        "options": {}
+      },
+      "credentials": {
+        "mySql": {
+          "id": "cred-mysql-origem",
+          "name": "MySQL Origem"
+        }
+      }
+    },
+    {
+      "id": "b8c9d0e1-0008-0008-0008-000000000003",
+      "name": "Transformar para Destino",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nif (items.length === 0) {\n  console.log('Nenhum registro para sincronizar');\n  return [{ json: { sincronizados: 0, ids: [] } }];\n}\n\nconst ids = items.map(i => i.json.id);\n\nconst registros = items.map(item => ({\n  external_id: `mysql_${item.json.id}`,\n  full_name: item.json.nome,\n  email: item.json.email,\n  phone: item.json.telefone,\n  status: item.json.status === 'ativo' ? 'active' : 'inactive',\n  segment: item.json.categoria,\n  lifetime_value: parseFloat(item.json.valor || 0),\n  last_updated: item.json.atualizado_em,\n  source: 'mysql_sync'\n}));\n\nreturn [{ json: { registros, ids, total: registros.length } }];"
+      }
+    },
+    {
+      "id": "b8c9d0e1-0008-0008-0008-000000000004",
+      "name": "Enviar para API Destino",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.destino.com/v2/contacts/bulk-upsert",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contacts: $json.registros }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "cred-destino",
+          "name": "API Destino"
+        }
+      }
+    },
+    {
+      "id": "b8c9d0e1-0008-0008-0008-000000000005",
+      "name": "Marcar como Sincronizado",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [1120, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE clientes SET sincronizado = 1, sincronizado_em = NOW() WHERE id IN ({{ $('Transformar para Destino').item.json.ids.join(',') }});",
+        "options": {}
+      },
+      "credentials": {
+        "mySql": {
+          "id": "cred-mysql-origem",
+          "name": "MySQL Origem"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Sincronizar a Cada Hora": {
+      "main": [
+        [
+          {
+            "node": "Buscar Registros Novos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Registros Novos": {
+      "main": [
+        [
+          {
+            "node": "Transformar para Destino",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transformar para Destino": {
+      "main": [
+        [
+          {
+            "node": "Enviar para API Destino",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar para API Destino": {
+      "main": [
+        [
+          {
+            "node": "Marcar como Sincronizado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "id": "b8c9d0e1-0008-0008-0008-000000000000",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
