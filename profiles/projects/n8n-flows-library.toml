@@ -1,0 +1,18 @@
+# Fail-closed: any match marks every component affected.
+global_paths = [
+    "profiles/**",
+    ".github/workflows/nexus-quality-gate.yml",
+    "scripts/nexus_quality_gate.py",
+  ]
+
+[project]
+id = "n8n-flows-library"
+repository = "Rubens-Marques/n8n-flows-library"
+
+[components.app]
+paths = [
+    "**/*.json",
+    "docs/**",
+  ]
+checks = ["gate-contract", "trivy"]
+images = []
